@@ -1,0 +1,20 @@
+# Development Dockerfile with Hot Reload
+FROM node:20-alpine
+
+WORKDIR /app
+
+# package.json 복사
+COPY package*.json ./
+
+# 의존성 설치 (개발 의존성 포함)
+RUN npm install
+# yarn을 사용하는 경우
+# RUN yarn install
+
+# 소스 코드는 volume으로 마운트
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
+# yarn을 사용하는 경우
+# CMD ["yarn", "dev"]
