@@ -22,18 +22,25 @@ echo "================================================"
 # 백업 디렉토리 생성
 mkdir -p $BACKUP_DIR
 
-# 컨테이너 실행 확인
-if ! docker ps | grep -q $CONTAINER_NAME; then
-    echo "❌ 컨테이너 '$CONTAINER_NAME'가 실행 중이지 않습니다."
+# 컨테이너 실행 확인 (정확 매칭)
+if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "[NG] 컨테이너 '$CONTAINER_NAME'가 실행 중이지 않습니다."
     exit 1
 fi
 
-echo "🔄 백업 시작..."
+# DB_PASSWORD 확인
+if [ -z "$DB_PASSWORD" ]; then
+    echo "[NG] DB_PASSWORD 환경변수가 설정되지 않았습니다."
+    echo "     실행 방법: DB_PASSWORD=yourpassword ./backup-db.sh"
+    exit 1
+fi
+
+echo ">>> 백업 시작..."
 
 # MySQL 덤프
 docker exec $CONTAINER_NAME mysqldump \
     -u root \
-    -p${DB_PASSWORD:-password} \
+    -p"${DB_PASSWORD}" \
     --single-transaction \
     --routines \
     --triggers \
@@ -43,12 +50,12 @@ docker exec $CONTAINER_NAME mysqldump \
 # Gzip 압축
 gzip $BACKUP_FILE
 
-echo "✅ 백업 완료!"
+echo "[OK] 백업 완료!"
 echo "파일: ${BACKUP_FILE}.gz"
 echo "크기: $(du -h ${BACKUP_FILE}.gz | cut -f1)"
 
 # 7일 이상 된 백업 파일 삭제
 echo ""
-echo "🗑️  오래된 백업 파일 정리 중..."
+echo ">>> 오래된 백업 파일 정리 중..."
 find $BACKUP_DIR -name "*.sql.gz" -mtime +7 -delete
-echo "✅ 정리 완료!"
+echo "[OK] 정리 완료!"

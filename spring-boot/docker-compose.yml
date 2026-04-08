@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -14,10 +12,10 @@ services:
       # Spring Profile
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILE:-prod}
 
-      # Database
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${DB_NAME:-app_db}?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:-root}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-password}
+      # Database (내부 네트워크 통신이므로 useSSL=false 사용)
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${DB_NAME:-app_db}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-app_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
 
       # JPA
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
@@ -25,6 +23,8 @@ services:
 
       # Server
       SERVER_PORT: 8080
+      SERVER_SHUTDOWN: graceful
+      SPRING_LIFECYCLE_TIMEOUT-PER-SHUTDOWN-PHASE: 20s
     volumes:
       - ./logs:/srv/logs/app
     depends_on:
@@ -33,30 +33,60 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   mysql:
     image: mysql:8.0
     container_name: mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME:-app_db}
+      MYSQL_USER: ${DB_USER:-app_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       TZ: Asia/Seoul
-    ports:
-      - "${DB_PORT:-3306}:3306"
+    # 프로덕션에서는 DB 포트를 외부에 노출하지 않는 것을 권장합니다.
+    # 디버깅이 필요한 경우에만 아래 주석을 해제하세요.
+    # ports:
+    #   - "${DB_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # 초기 스크립트 (선택사항)
+      # 초기 SQL 스크립트가 필요한 경우 init.sql 파일을 생성하고 아래 주석을 해제하세요.
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-password}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - app-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   mysql-data:
